@@ -1,0 +1,5 @@
+incident_id,patient_id,age,gender,incident_date,city,agency,response_time
+1,CPP001,34,M,2024-01-01,NewYork,AgencyA,15
+2,DPP002,45,F,2024-01-02,Boston,AgencyB,20
+3,EPP003,,M,2024-01-03,San Diego,AgencyA,18
+4,FPP001,35,M,2024-02-01,Washington,AgencyA,12
