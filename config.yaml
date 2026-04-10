@@ -1,3 +1,21 @@
-file_path: data/sample.csv
-batch_size: 1000
 environment: dev
+
+database:
+  # SQL Server is preferred by the assessment; SQLite is used here
+  # for a self-contained local run and can be swapped without code changes.
+  url: sqlite:///ems.db
+
+paths:
+  input_csv: sample.csv
+
+etl:
+  batch_size: 1000
+  load_mode: full # full | incremental
+  source_system: ems_csv
+
+validation:
+  allowed_gender:
+    - M
+    - F
+    - U
+    - UNKNOWN
