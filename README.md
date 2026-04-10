@@ -25,5 +25,13 @@ Language: Python 3.12 (Pandas for transformation, SQLAlchemy for ORM/Bulk Loadin
 Database: SQL Server (Target) / SQLite (Local testing).
 Configuration: YAML-based parameterization for environment switching (Dev/Prod).
 
+## Data Source Configuration
+The pipeline is configured to use the Indiana Data Hub **EMS Incidents 2024** dataset:
+`https://hub.mph.in.gov/dataset/emergency-medical-service-runs`
+
+`config.yaml` now points directly to the 2024 CSV resource URL.
+For local test runs, `nrows` is set to `10000` to keep execution time reasonable.
+Remove or increase `nrows` for full-volume ingestion.
+
 
 

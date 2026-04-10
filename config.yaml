@@ -1,3 +1,4 @@
-file_path: data/sample.csv
+file_path: https://hub.mph.in.gov/dataset/8404e4ae-c244-48c1-95ee-c2eff5e177e6/resource/249f8df8-7728-4cab-a167-7c93c5e43eee/download/ems_runs_2024.csv
 batch_size: 1000
 environment: dev
+nrows: 10000
