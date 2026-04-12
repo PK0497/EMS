@@ -1,0 +1,39 @@
+# ============================================================
+# EMS ETL Pipeline Configuration
+# Switch environment: set `environment` to dev or prod.
+# No code changes required between environments.
+# ============================================================
+
+# Default source file — path relative to project root.
+# Overridden at runtime via: python main.py --file "data/ems_runs_2023.csv"
+file_path: "data/ems_runs_2024 (1).csv"
+
+# Rows per chunk — controls memory footprint during extract.
+# Increase for faster loads on high-memory machines.
+batch_size: 10000
+
+# Active environment — controls which db connection is used.
+environment: dev
+
+# full        → stage and load all rows from the source file
+# incremental → stage all raw rows (auditability), but load only rows to DW
+#               where incident_dt >= incremental_from_date
+load_mode: full
+
+# Used only when load_mode = incremental.
+# Set to the earliest incident_dt to include in this DW load (YYYY-MM-DD).
+# Null means no filter (behaves like full load).
+incremental_from_date: null
+
+# Directory for per-run log files (relative to project root).
+# One file per run: logs/etl_<year>_YYYYMMDD_HHMMSS.log
+log_dir: logs
+
+# Directory for per-run reject CSVs (relative to project root).
+# One file per run (if any rejects): rejects/rejects_<year>_YYYYMMDD_HHMMSS.csv
+reject_dir: rejects
+
+db:
+  dev:  "mssql+pyodbc://localhost/ems_dev?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes"
+  test: "mssql+pyodbc://TEST_SERVER/ems_test?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes"
+  prod: "mssql+pyodbc://SERVER/DATABASE?driver=ODBC+Driver+17+for+SQL+Server&trusted_connection=yes"
