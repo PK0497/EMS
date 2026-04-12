@@ -1,0 +1,35 @@
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# ── Source data (large CSVs — managed outside version control) ─
+data/*.csv
+!data/sample.csv
+
+# ── Runtime outputs (generated per pipeline run) ─────────────
+logs/
+rejects/
+
+# ── Local database artifacts ──────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── IDE / OS ─────────────────────────────────────────────────
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# ── Environment / secrets ─────────────────────────────────────
+.env
+*.env

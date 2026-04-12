@@ -1,0 +1,23 @@
+FIELD_NAME,FIELD_DESCRIPTION
+INCIDENT_DT,The month/day/year the incident took place
+INCIDENT_COUNTY,The county or parish where the patient was found or to which the unit responded (or best approximation)
+CHIEF_COMPLAINT_DISPATCH,Description of the complaint that was reported to dispatch
+CHIEF_COMPLAINT_ANATOMIC_LOC ,The anatomic location of the patient's chief complaint
+PRIMARY_SYMPTOM,The patient's primary symptom
+PROVIDER_IMPRESSION_PRIMARY,The provider 's primary impression
+DISPOSITION_ED,The known disposition of the patient from the Emergency Department (ED)
+DISPOSITION_HOSPITAL,"Indication of how the patient was dispositioned from the hospital, if admitted"
+INJURY_FLG ,Flag indicating injury to the patient
+NALOXONE_GIVEN_FLG,A flag that indicates whether or not naloxone was given
+MEDICATION_GIVEN_OTHER_FLG,Flag indicating the provider gave the patient medication
+DESTINATION_TYPE,Type of destination to which the resonding unit transferred the patient.
+PROVIDER_TYPE_STRUCTURE,"Structure under which the EMS provider operates (e.g. Fire Department, Private Nonhospital, Hospital, Community Nonprofit, etc.)"
+PROVIDER_TYPE_SERVICE,"Type of service the EMS provider providers (e.g. 911 Response w/ Transport, 911 Response w/out Transport, Air Medical, Hazmat, etc.)"
+PROVIDER_TYPE_SERVICE_LEVEL,"Service level the EMS provider provides (e.g. EMT-Basic, EMT-Intermediate, First Responder, etc.)"
+PROVIDER_TO_SCENE_MINS ,Number of minutes for the time it took for the provider to arrive on the scene
+PROVIDER_TO_DESTINATION_MINS ,Number of minutes for the time it took for the provider to reach the destination from the scene
+UNIT_NOTIFIED_BY_DISPATCH_DT,Date the provider's unit was initially notified
+UNIT_ARRIVED_ON_SCENE_DT,Date the provider's unit arrived on the scene
+UNIT_ARRIVED_TO_PATIENT_DT,Date the provider's unit initially came in contact with the patient
+UNIT_LEFT_SCENE_DT,Date the provider's unit left the scene
+PATIENT_ARRIVED_DESTINATION_DT,Date the patient arrived at the destination
