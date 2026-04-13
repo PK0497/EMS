@@ -10,7 +10,7 @@ file_path: "data/ems_runs_2024 (1).csv"
 
 # Rows per chunk — controls memory footprint during extract.
 # Increase for faster loads on high-memory machines.
-batch_size: 10000
+batch_size: 100000
 
 # Active environment — controls which db connection is used.
 environment: dev

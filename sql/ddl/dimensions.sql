@@ -15,8 +15,8 @@
 
 -- ------------------------------------------------------------
 -- 1. dim_calendar  (SCD Type 0)
---    Static date spine 1990-01-01 → 2100-12-31 (~40,541 rows).
---    Populated once at setup time via a separate calendar script.
+--    Static date spine 2020-01-01 → 2030-12-31 (~4,018 rows).
+--    Auto-populated on first dim load (idempotent).
 --    Join to fact via: incident_dt = full_date  (no surrogate key).
 -- ------------------------------------------------------------
 
@@ -119,8 +119,8 @@ IF NOT EXISTS (
 BEGIN
     CREATE TABLE {schema}.dim_ems_providers (
         provider_key                INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_dim_ems_providers PRIMARY KEY,
-        provider_type_structure     NVARCHAR(200)     NOT NULL,
-        provider_type_service       NVARCHAR(200)     NOT NULL,
+        provider_type_structure     NVARCHAR(200)     NULL,
+        provider_type_service       NVARCHAR(200)     NULL,
         provider_type_service_level NVARCHAR(200)     NOT NULL,  -- "NOT RECORDED" sentinel where blank
         effective_from              DATE              NOT NULL DEFAULT CAST(GETUTCDATE() AS DATE),
         effective_to                DATE              NULL,

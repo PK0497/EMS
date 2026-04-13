@@ -23,7 +23,7 @@
 
 ## 1. Architecture & Flow
 
-The pipeline follows a **four-phase ETL** pattern implementing a **three-layer Medallion Architecture** (Bronze → Silver → Gold). All SQL is externalized into `.sql` files; Python orchestrates execution only.
+The pipeline follows a **five-phase ETL** pattern implementing a **three-layer Medallion Architecture** (Bronze → Silver → Gold). All SQL is externalized into `.sql` files; Python orchestrates execution only.
 
 ```
 ┌──────────────┐     ┌──────────────────────────────────────────────────────────┐
@@ -47,7 +47,7 @@ The pipeline follows a **four-phase ETL** pattern implementing a **three-layer M
                      │  │ (HEAP · all  │    │ (typed ·     │  Staging Layers    │
                      │  │  NVARCHAR)   │    │  normalized) │                    │
                      │  └──────────────┘    └──────┬───────┘                    │
-                     │                             │  DQ checks (8 assertions)  │
+                     │                             │  DQ checks (7 hard + 1 warn)│
                      │                             │  ❌ FAIL → pipeline aborts │
                      │                             ▼                            │
                      │            ┌────────────────────────────┐                │
@@ -106,8 +106,8 @@ EMS/
 │   │   │                           #   dim_dispatch_complaint, dim_ems_providers
 │   │   └── facts.sql               # fct_history_ems_incidents
 │   └── dml/                        # Runtime SQL — Silver → Gold promotion
-│       ├── dq_checks.sql           # 8 post-staging assertions (Silver gate)
-│       ├── load_dims.sql           # MERGE into Gold dim tables
+│       ├── dq_checks.sql           # 7 hard + 1 warn-only post-staging assertions (Silver gate)
+│       ├── load_dims.sql           # Calendar populate + MERGE into Gold dim tables
 │       └── load_fact.sql           # INSERT…SELECT into Gold fact table
 │
 ├── data/
@@ -140,7 +140,7 @@ EMS/
 pip install -r requirements.txt
 ```
 
-`requirements.txt` includes: `pandas>=2.0.0`, `numpy>=1.24.0`, `PyYAML>=6.0`, `SQLAlchemy>=2.0.0`, `pyodbc>=4.0.39`.
+`requirements.txt` includes: `pandas`, `numpy`, `PyYAML`, `SQLAlchemy`, `pyodbc`.
 
 ### Step 2 — Configure the connection
 
@@ -169,9 +169,9 @@ Pipeline startup (automatic):
   sql/ddl/facts.sql        → fct_history_ems_incidents  (if not exists)
 ```
 
-> **Note:** `dim_calendar` (date spine 1990–2100, ~40,541 rows) is created
-> automatically by `init_db()` but must be populated separately with a
-> calendar generation script before the first fact load.
+> **Note:** `dim_calendar` (date spine 2020–2030, ~4,018 rows) is created
+> by `init_db()` and automatically populated on the first dim load step.
+> The population is idempotent — it only inserts if the table is empty.
 
 ### Step 4 — Run the pipeline
 
@@ -221,7 +221,7 @@ All parameters live in `config/config.yaml`. CLI arguments override them at runt
 | `environment` | `dev` | `--env` | Selects the DB connection string (`dev`/`test`/`prod`) |
 | `load_mode` | `full` | `--load-mode` | `full` loads all rows; `incremental` filters DW load by date |
 | `incremental_from_date` | `null` | `--from-date` | Lower-bound `incident_dt` for incremental DW load (YYYY-MM-DD) |
-| `batch_size` | `10000` | — | Rows per CSV chunk (controls memory footprint) |
+| `batch_size` | `100000` | — | Rows per CSV chunk (controls memory footprint) |
 | `log_dir` | `logs` | — | Directory for log files |
 | `reject_dir` | `rejects` | — | Directory for reject CSVs |
 | `db.dev` / `db.test` / `db.prod` | — | — | SQLAlchemy connection strings |
@@ -279,8 +279,8 @@ erDiagram
 
     dim_ems_providers {
         int      provider_key         PK  "IDENTITY surrogate key"
-        nvarchar provider_type_structure   "e.g. emergency medical services"
-        nvarchar provider_type_service     "e.g. ems - advanced life support"
+        nvarchar provider_type_structure   "Nullable — e.g. fire department"
+        nvarchar provider_type_service     "Nullable — e.g. 911 response"
         nvarchar provider_type_service_level  UK  "Composite UK with above 2; NOT RECORDED sentinel"
         date     effective_from            "SCD Type 2 — row valid from this date"
         date     effective_to              "SCD Type 2 — NULL means currently active"
@@ -311,9 +311,9 @@ erDiagram
         nvarchar primary_symptom          "1,231 distinct; 82% populated"
         nvarchar provider_impression_primary  "1,813 distinct; 86% populated"
 
-        nvarchar injury_flg               "YES / NO"
-        nvarchar naloxone_given_flg       "YES / NO"
-        nvarchar medication_given_other_flg  "YES / NO"
+        nvarchar injury_flg               "YES / NO / UNKNOWN"
+        nvarchar naloxone_given_flg       "Source-dependent flag values"
+        nvarchar medication_given_other_flg  "Source-dependent flag values"
 
         nvarchar disposition_ed           "21 distinct; ~3% populated"
         nvarchar disposition_hospital     "19 distinct; ~2.5% populated"
@@ -345,7 +345,7 @@ erDiagram
 | Dimension keys | `geography_key`, `provider_key`, `complaint_key` | Nullable INT; no FK constraints |
 | Denormalized values | All natural-key and descriptive columns from dims | Zero-join access for DA/DS |
 | Measures | `provider_to_scene_mins`, `provider_to_destination_mins` | SMALLINT; CHECK >= 0 |
-| Flags | `injury_flg`, `naloxone_given_flg`, `medication_given_other_flg` | YES / NO / NULL |
+| Flags | `injury_flg`, `naloxone_given_flg`, `medication_given_other_flg` | Source-dependent flag values; NULL when missing |
 | Disposition | `disposition_ed`, `disposition_hospital`, `destination_type` | Degenerate dimensions |
 | Clinical | `primary_symptom`, `provider_impression_primary` | High-cardinality text |
 | ETL audit | `etl_batch_id`, `etl_loaded_at` | Batch tracking |
@@ -354,7 +354,7 @@ erDiagram
 
 | Table | SCD | Natural Key | Notes |
 |---|---|---|---|
-| `dim_calendar` | Type 0 | `full_date` | Pre-populated date spine 1990–2100; joined via date match |
+| `dim_calendar` | Type 0 | `full_date` | Auto-populated date spine 2020–2030; joined via date match |
 | `dim_geography` | Type 1 | `incident_county` | 93 distinct Texas counties; overwrite on correction |
 | `dim_dispatch_complaint` | Type 1 | `chief_complaint_dispatch` | 118 NEMSIS dispatch codes; overwrite on NEMSIS version update |
 | `dim_ems_providers` | Type 2 | `structure + service + level` | Certification upgrades tracked; `effective_from/to`, `is_current` |
@@ -391,18 +391,19 @@ Rejected rows are collected across all chunks and written once per run to:
 ### Stage 2 — SQL Assertions (`sql/dml/dq_checks.sql`)
 
 Runs after all chunks are staged, against `stg_ems_clean` for the current `etl_batch_id`.  
-**Any failed check aborts the pipeline** — dim and fact tables are not written.
+**Any failed hard check aborts the pipeline** — dim and fact tables are not written.  
+Warn-only checks are logged but do not block the load.
 
-| Check Name | Threshold | Rationale |
-|---|---|---|
-| `row_count` | > 0 | At least one row must be staged |
-| `null_incident_dt` | = 0 | Required field; transform already rejects nulls — residual = code bug |
-| `null_incident_cnty` | = 0 | Required field; same rationale |
-| `null_complaint_dispatch` | = 0 | 100% populated in source — NULL signals file corruption |
-| `neg_scene_mins` | = 0 | Transform rejects negatives — residual = code bug |
-| `neg_dest_mins` | = 0 | Same |
-| `future_incident_dt` | = 0 | EMS incidents cannot occur in the future |
-| `invalid_injury_flg` | = 0 | After transform, only YES / NO / NULL are valid values |
+| Check Name | Type | Threshold | Rationale |
+|---|---|---|---|
+| `row_count` | Hard | > 0 | At least one row must be staged |
+| `null_incident_dt` | Hard | = 0 | Required field; transform already rejects nulls — residual = code bug |
+| `null_incident_cnty` | Hard | = 0 | Required field; same rationale |
+| `neg_scene_mins` | Hard | = 0 | Transform rejects negatives — residual = code bug |
+| `neg_dest_mins` | Hard | = 0 | Same |
+| `future_incident_dt` | Hard | = 0 | EMS incidents cannot occur in the future |
+| `invalid_injury_flg` | Hard | = 0 | After transform, only YES / NO / UNKNOWN / NULL are valid values |
+| `null_complaint_dispatch` | Warn | logged | Source data has sparse NULLs (~0.01%); not a code bug |
 
 ### Recovery from DQ Failure
 
@@ -525,7 +526,7 @@ The `try / except / finally` block in `main.py` guarantees that even on failure:
 | **Unknown members** | Removed (`-1` pattern not used) | Nullable keys are cleaner than a synthetic -1 row; NULLs are explicit and easier to filter in analysis |
 | **Denormalized fact** | All dim attribute values are stored on the fact in addition to surrogate keys | Zero-join access for DA/DS — most operational dashboards need county, complaint, and provider type without joins |
 | **DW loading** | SQL `MERGE` for dims, `INSERT…SELECT` for fact | Set-based SQL Server operations are significantly faster than row-by-row Python inserts for 1M+ row datasets |
-| **Chunked reading** | `batch_size = 10,000` rows per chunk | Bounds memory usage; a 1.6M-row CSV fits in ~10 MB per chunk vs. ~160 MB if fully loaded |
+| **Chunked reading** | `batch_size = 100,000` rows per chunk | Bounds memory usage; a 1.6M-row CSV fits in ~100 MB per chunk vs. ~1.6 GB if fully loaded |
 | **Column casing** | Single-word codes → UPPER, multi-word descriptions → lower | Consistent normalization prevents case-sensitivity mismatches in MERGE natural key joins |
 | **DQ failure behavior** | Pipeline aborts before any DW write on DQ failure | Prevents partial or corrupt data reaching the fact table; staging rows are kept for triage |
 | **SCD Type 2 for providers** | `effective_from`, `effective_to`, `is_current` columns on `dim_ems_providers` | Agency certification level upgrades (BLS→ALS) must be traceable — historical incidents must reference the level active at the time |

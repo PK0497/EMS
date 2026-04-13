@@ -1,5 +1,5 @@
-pandas>=2.0.0
-numpy>=1.24.0
-PyYAML>=6.0
-SQLAlchemy>=2.0.0
-pyodbc>=4.0.39
+pandas>=2.0.0       # DataFrame-based CSV reading, chunked transforms, staging writes
+numpy>=1.24.0       # Numeric operations and NA handling in transform layer
+PyYAML>=6.0         # config/config.yaml parsing
+SQLAlchemy>=2.0.0   # Database engine, connection management, parameterized SQL execution
+pyodbc>=4.0.39      # SQL Server ODBC driver interface (used by SQLAlchemy)

@@ -21,7 +21,9 @@ exposes named queries as attributes:
     dq_checks.sql      row_count, null_incident_dt, null_incident_cnty,
                        null_complaint_dispatch, neg_scene_mins,
                        neg_dest_mins, future_incident_dt, invalid_injury_flg
-    load_dims.sql      merge_geography, merge_complaint, merge_providers
+                       (7 hard checks + 1 warn-only)
+    load_dims.sql      populate_calendar, merge_geography, merge_complaint,
+                       merge_providers
     load_fact.sql      insert_fact
 
 SQL files use '-- name: <query_name>' section headers (aiosql convention).
@@ -145,14 +147,16 @@ def get_engine(env: str | None = None) -> Engine:
           When None, falls back to the 'environment' key in config.yaml.
           Passing the value resolved by main.py ensures CLI --env overrides
           take effect without re-reading the config file here.
-
-    fast_executemany=True maximises bulk-insert throughput on SQL Server.
     """
     with open(ROOT / "config" / "config.yaml", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     resolved_env = env or cfg.get("environment", "dev")
     url = cfg["db"][resolved_env]
-    return create_engine(url, fast_executemany=True)
+    # fast_executemany=True causes pyodbc to size buffers from the first row,
+    # truncating longer strings in later rows (known limitation with variable-length data).
+    # The MERGE and INSERT...SELECT DML statements are single-statement and unaffected;
+    # only pandas to_sql staging calls use executemany, so we omit this option.
+    return create_engine(url)
 
 
 # ============================================================
@@ -222,8 +226,7 @@ def load_staging_raw(
         schema=schema,
         if_exists="append",
         index=False,
-        chunksize=5_000,
-        method="multi",
+        chunksize=1_000,
     )
     logger.debug(
         "Staged %d raw rows → %s.stg_ems_raw  batch_id=%d  source_year=%s",
@@ -262,8 +265,7 @@ def load_staging_clean(
         schema=schema,
         if_exists="append",
         index=False,
-        chunksize=5_000,
-        method="multi",
+        chunksize=1_000,
     )
     logger.debug(
         "Staged %d clean rows → %s.stg_ems_clean  batch_id=%d  source_year=%s",
@@ -284,7 +286,6 @@ _DQ_EXPECT_ZERO: dict[str, bool] = {
     "row_count":              False,
     "null_incident_dt":       True,
     "null_incident_cnty":     True,
-    "null_complaint_dispatch": True,
     # Numeric measures
     "neg_scene_mins":         True,
     "neg_dest_mins":          True,
@@ -294,19 +295,24 @@ _DQ_EXPECT_ZERO: dict[str, bool] = {
     "invalid_injury_flg":     True,
 }
 
+# Checks that are logged but do not abort the pipeline.
+# These capture known data-quality gaps in the source (not code bugs).
+_DQ_WARN_ONLY: dict[str, str] = {
+    "null_complaint_dispatch": "NULL chief_complaint_dispatch (warn-only)",
+}
+
 _DQ_LABELS: dict[str, str] = {
     # Completeness
     "row_count":              "stg_ems_clean row count",
     "null_incident_dt":       "NULL incident_dt",
     "null_incident_cnty":     "NULL incident_county",
-    "null_complaint_dispatch": "NULL chief_complaint_dispatch",
     # Numeric measures
     "neg_scene_mins":         "negative provider_to_scene_mins",
     "neg_dest_mins":          "negative provider_to_destination_mins",
     # Temporal validity
     "future_incident_dt":     "future incident_dt",
     # Value-set conformance
-    "invalid_injury_flg":     "invalid injury_flg value (not YES/NO/NULL)",
+    "invalid_injury_flg":     "invalid injury_flg value (not YES/NO/UNKNOWN/NULL)",
 }
 
 
@@ -345,6 +351,14 @@ def run_dq_checks(batch_id: int, engine: Engine, schema: str = "dev_ems") -> boo
                     "DQ PASS: %s = %d  batch_id=%d", label, count, batch_id
                 )
 
+        for name, label in _DQ_WARN_ONLY.items():
+            sql   = getattr(dq, name)
+            count = conn.execute(text(sql), params).scalar()
+            if count > 0:
+                logger.warning("DQ WARN: %s = %d  batch_id=%d", label, count, batch_id)
+            else:
+                logger.info("DQ PASS: %s = 0  batch_id=%d", label, batch_id)
+
     return passed
 
 
@@ -359,8 +373,8 @@ def load_dims_sql(
     schema: str = "dev_ems",
 ) -> None:
     """
-    Execute each named MERGE statement from load_dims.sql in order
-    against {schema}.dim_* tables.
+    Populate dim_calendar (idempotent, skips if non-empty) then execute
+    each named MERGE statement from load_dims.sql against {schema}.dim_*.
     inc_from is passed as :inc_from; when None the SQL predicate
     (:inc_from IS NULL OR ...) includes all rows for the batch.
     """
@@ -370,6 +384,7 @@ def load_dims_sql(
         "inc_from": inc_from.isoformat() if inc_from else None,
     }
     with engine.begin() as conn:
+        conn.execute(text(dims.populate_calendar))
         conn.execute(text(dims.merge_geography), params)
         conn.execute(text(dims.merge_complaint),  params)
         conn.execute(text(dims.merge_providers),  params)

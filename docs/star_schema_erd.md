@@ -55,8 +55,8 @@ erDiagram
 
     dim_ems_providers {
         int      provider_key         PK  "IDENTITY surrogate key"
-        nvarchar provider_type_structure   "e.g. emergency medical services"
-        nvarchar provider_type_service     "e.g. ems - advanced life support"
+        nvarchar provider_type_structure   "Nullable — e.g. fire department"
+        nvarchar provider_type_service     "Nullable — e.g. 911 response"
         nvarchar provider_type_service_level  UK  "Composite UK with above 2; NOT RECORDED sentinel"
         date     effective_from            "SCD Type 2 — row valid from this date"
         date     effective_to              "SCD Type 2 — NULL means currently active"
@@ -87,9 +87,9 @@ erDiagram
         nvarchar primary_symptom          "1,231 distinct; 82% populated"
         nvarchar provider_impression_primary  "1,813 distinct; 86% populated"
 
-        nvarchar injury_flg               "YES / NO"
-        nvarchar naloxone_given_flg       "YES / NO"
-        nvarchar medication_given_other_flg  "YES / NO"
+        nvarchar injury_flg               "YES / NO / UNKNOWN"
+        nvarchar naloxone_given_flg       "Source-dependent flag values"
+        nvarchar medication_given_other_flg  "Source-dependent flag values"
 
         nvarchar disposition_ed           "21 distinct; ~3% populated"
         nvarchar disposition_hospital     "19 distinct; ~2.5% populated"
@@ -164,7 +164,7 @@ erDiagram
         nvarchar provider_impression_primary
         nvarchar disposition_ed
         nvarchar disposition_hospital
-        nvarchar injury_flg                     "YES / NO (uppercased)"
+        nvarchar injury_flg                     "YES / NO / UNKNOWN (uppercased)"
         nvarchar naloxone_given_flg
         nvarchar medication_given_other_flg
         nvarchar destination_type
@@ -191,7 +191,7 @@ flowchart TD
 
     subgraph PYTHON["ETL Pipeline  (main.py)"]
         direction TB
-        E["extract.py\nChunked CSV read\nbatch_size = 10,000"]
+        E["extract.py\nChunked CSV read\nbatch_size = 100,000"]
         T["transform.py\nCase normalize · Parse dates\nCast numerics · Reject invalid"]
         R["rejects/rejects_YYYY_ts.csv\nRows failing validation"]
     end
@@ -202,7 +202,7 @@ flowchart TD
     end
 
     subgraph DQ["Phase C — DQ Checks  (dq_checks.sql)"]
-        DQC["8 SQL assertions\nrow_count · nulls · flags · future dates\n❌ FAIL → pipeline aborts"]
+        DQC["7 hard + 1 warn-only assertions\nrow_count · nulls · flags · future dates\n❌ FAIL → pipeline aborts"]
     end
 
     subgraph DW["Data Warehouse  ─  {schema}"]
@@ -211,7 +211,7 @@ flowchart TD
             GEO["dim_geography\nSCD Type 1"]
             COMP["dim_dispatch_complaint\nSCD Type 1"]
             PROV["dim_ems_providers\nSCD Type 2"]
-            CAL["dim_calendar\nSCD Type 0\n(pre-populated)"]
+            CAL["dim_calendar\nSCD Type 0\n(auto-populated 2020–2030)"]
         end
         FCT["fct_history_ems_incidents\n(load_fact.sql · INSERT…SELECT)\nWide enriched fact · zero-join columns"]
     end
@@ -277,6 +277,6 @@ Automatic (pipeline startup):
                           dim_dispatch_complaint, dim_ems_providers  (Gold)
   4. facts.sql         → fct_history_ems_incidents  (Gold)
 
-Manual (one-time):
-  5. Populate dim_calendar  → date spine 1990-01-01 through 2100-12-31
+Automatic (dim load step):
+  5. populate_calendar  → date spine 2020-01-01 through 2030-12-31 (idempotent)
 ```

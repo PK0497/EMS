@@ -21,6 +21,53 @@
 -- ============================================================
 
 
+-- name: populate_calendar
+-- dim_calendar  (SCD Type 0 — one-time static date spine)
+-- Only inserts if the table is empty (idempotent).
+-- Generates dates from 2020-01-01 to 2030-12-31 covering all
+-- practical EMS incident years.
+IF NOT EXISTS (SELECT 1 FROM {schema}.dim_calendar)
+BEGIN
+    ;WITH date_cte AS (
+        SELECT CAST('2020-01-01' AS DATE) AS dt
+        UNION ALL
+        SELECT DATEADD(DAY, 1, dt) FROM date_cte WHERE dt < '2030-12-31'
+    )
+    INSERT INTO {schema}.dim_calendar (
+        date_key, full_date, year, quarter, month, month_name, month_short,
+        day, day_of_week, day_name, day_short, week_of_year,
+        is_weekend, is_weekday, is_leap_year,
+        first_day_of_month, last_day_of_month,
+        first_day_of_quarter, last_day_of_quarter,
+        first_day_of_year, last_day_of_year
+    )
+    SELECT
+        YEAR(dt) * 10000 + MONTH(dt) * 100 + DAY(dt),
+        dt,
+        YEAR(dt),
+        DATEPART(QUARTER, dt),
+        MONTH(dt),
+        DATENAME(MONTH, dt),
+        LEFT(DATENAME(MONTH, dt), 3),
+        DAY(dt),
+        DATEPART(WEEKDAY, dt),
+        DATENAME(WEEKDAY, dt),
+        LEFT(DATENAME(WEEKDAY, dt), 3),
+        DATEPART(ISO_WEEK, dt),
+        CASE WHEN DATEPART(WEEKDAY, dt) IN (1, 7) THEN 1 ELSE 0 END,
+        CASE WHEN DATEPART(WEEKDAY, dt) IN (1, 7) THEN 0 ELSE 1 END,
+        CASE WHEN (YEAR(dt) % 4 = 0 AND YEAR(dt) % 100 != 0) OR YEAR(dt) % 400 = 0 THEN 1 ELSE 0 END,
+        DATEFROMPARTS(YEAR(dt), MONTH(dt), 1),
+        EOMONTH(dt),
+        DATEFROMPARTS(YEAR(dt), (DATEPART(QUARTER, dt) - 1) * 3 + 1, 1),
+        EOMONTH(DATEFROMPARTS(YEAR(dt), DATEPART(QUARTER, dt) * 3, 1)),
+        DATEFROMPARTS(YEAR(dt), 1, 1),
+        DATEFROMPARTS(YEAR(dt), 12, 31)
+    FROM date_cte
+    OPTION (MAXRECURSION 5000);
+END
+
+
 -- name: merge_geography
 -- dim_geography  (SCD Type 1 — county name is stable)
 MERGE {schema}.dim_geography AS tgt

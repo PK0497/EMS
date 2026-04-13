@@ -16,8 +16,10 @@ data/*.csv
 !data/sample.csv
 
 # ── Runtime outputs (generated per pipeline run) ─────────────
-logs/
-rejects/
+logs/*
+!logs/.gitkeep
+rejects/*
+!rejects/.gitkeep
 
 # ── Local database artifacts ──────────────────────────────────
 *.db
@@ -29,6 +31,9 @@ rejects/
 .idea/
 *.DS_Store
 Thumbs.db
+
+# ── Debug / temporary ─────────────────────────────────────────
+debug-*.log
 
 # ── Environment / secrets ─────────────────────────────────────
 .env

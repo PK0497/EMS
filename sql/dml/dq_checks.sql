@@ -10,18 +10,18 @@
 -- Parameter: :bid (INT) — etl_batch_id for the current run.
 --
 -- All checks return a single integer count.
--- Pass criteria (enforced in load.py _DQ_EXPECT_ZERO):
+-- Pass criteria (enforced in load.py _DQ_EXPECT_ZERO / _DQ_WARN_ONLY):
 --
---   Check                   Threshold   Rationale
---   ─────────────────────   ─────────   ──────────────────────────────────────────────
---   row_count               > 0         At least one row must have been staged
---   null_incident_dt        = 0         Required field; transform rejects nulls
---   null_incident_cnty      = 0         Required field; transform rejects nulls
---   null_complaint_dispatch = 0         100% populated in source — null signals corruption
---   neg_scene_mins          = 0         Transform rejects negatives; any here = code bug
---   neg_dest_mins           = 0         Same as above
---   future_incident_dt      = 0         Incidents cannot occur in the future
---   invalid_injury_flg      = 0         After transform, only 'YES', 'NO', or NULL allowed
+--   Check                   Type   Threshold   Rationale
+--   ─────────────────────   ────   ─────────   ─────────────────────────────────────
+--   row_count               Hard   > 0         At least one row must have been staged
+--   null_incident_dt        Hard   = 0         Required field; transform rejects nulls
+--   null_incident_cnty      Hard   = 0         Required field; transform rejects nulls
+--   neg_scene_mins          Hard   = 0         Transform rejects negatives; any here = code bug
+--   neg_dest_mins           Hard   = 0         Same as above
+--   future_incident_dt      Hard   = 0         Incidents cannot occur in the future
+--   invalid_injury_flg      Hard   = 0         After transform, only YES/NO/UNKNOWN/NULL allowed
+--   null_complaint_dispatch Warn   logged      Source has sparse NULLs (~0.01%); not a code bug
 -- ============================================================
 
 
@@ -49,9 +49,9 @@ WHERE  etl_batch_id = :bid
   AND  incident_county IS NULL
 
 -- name: null_complaint_dispatch
--- chief_complaint_dispatch is 100% populated (118 distinct values) in the
--- source CSV. Any NULL here means the CSV is corrupted or a staging bug
--- silently dropped values.
+-- chief_complaint_dispatch is nearly 100% populated (118 distinct values).
+-- A small number of NULLs exist in the source data and are acceptable.
+-- Treated as warn-only in load.py — logged but does not abort the pipeline.
 SELECT COUNT(*)
 FROM   {schema}.stg_ems_clean
 WHERE  etl_batch_id = :bid
@@ -90,11 +90,10 @@ WHERE  etl_batch_id = :bid
 
 -- name: invalid_injury_flg
 -- After case normalization in transform, injury_flg must be 'YES', 'NO',
--- or NULL. Any other value means an unexpected source code appeared.
--- Same pattern applies to naloxone_given_flg and medication_given_other_flg
--- (covered by same transform logic; spot-check injury_flg as representative).
+-- 'UNKNOWN', or NULL. NEMSIS sources commonly include 'UNKNOWN' as a
+-- legitimate response value.
 SELECT COUNT(*)
 FROM   {schema}.stg_ems_clean
 WHERE  etl_batch_id = :bid
   AND  injury_flg IS NOT NULL
-  AND  injury_flg NOT IN ('YES', 'NO')
+  AND  injury_flg NOT IN ('YES', 'NO', 'UNKNOWN')

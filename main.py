@@ -210,7 +210,7 @@ def run_etl() -> None:
     inc_from = datetime.date.fromisoformat(_inc_raw) if _inc_raw else None
 
     source_year = _parse_year(source_file)
-    run_start   = datetime.datetime.utcnow()
+    run_start   = datetime.datetime.now(datetime.timezone.utc)
     ts          = run_start.strftime("%Y%m%d_%H%M%S")
     batch_id    = int(run_start.timestamp())
 
@@ -311,7 +311,7 @@ def run_etl() -> None:
         raise
 
     finally:
-        run_end = datetime.datetime.utcnow()
+        run_end = datetime.datetime.now(datetime.timezone.utc)
         elapsed = (run_end - run_start).total_seconds()
         status  = "FAILED" if error_msg else "SUCCESS"
 

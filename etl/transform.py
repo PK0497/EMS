@@ -161,13 +161,35 @@ def transform(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     # ------------------------------------------------------------------
     for col in NUMERIC_COLS:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int16")
-            neg_mask = df[col].notna() & (df[col] < 0)
+            numeric = pd.to_numeric(df[col], errors="coerce")
+
+            # Reject rows with negative values (already invalid for EMS times)
+            neg_mask = numeric.notna() & (numeric < 0)
             if neg_mask.any():
                 bad = df[neg_mask].copy()
                 bad["reject_reason"] = f"Negative value in column: {col}"
                 reject_frames.append(bad)
                 df = df[~neg_mask].copy()
+                numeric = numeric[~neg_mask]
+
+            # Reject rows that overflow SMALLINT (> 32,767 min ≈ 22 days).
+            # Values this large are physically impossible for EMS and indicate
+            # a unit mismatch (e.g., seconds stored as minutes) or data corruption.
+            overflow_mask = numeric.notna() & (numeric > 32_767)
+            if overflow_mask.any():
+                bad = df[overflow_mask].copy()
+                bad["reject_reason"] = (
+                    f"Value exceeds SMALLINT range (>32767) in column: {col} "
+                    f"— likely a unit error (seconds stored as minutes)"
+                )
+                reject_frames.append(bad)
+                df = df[~overflow_mask].copy()
+                numeric = numeric[~overflow_mask]
+
+            # pandas 3.0+ strict safe-casting blocks float64 → Int16 via numpy.
+            # Routing through object dtype uses a different code path that correctly
+            # maps NaN → pd.NA without triggering the 'safe' casting restriction.
+            df[col] = numeric.astype(object).astype("Int16")
 
     # ------------------------------------------------------------------
     # 6. Required-field validation → reject null rows
